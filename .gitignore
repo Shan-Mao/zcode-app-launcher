@@ -1,0 +1,26 @@
+# Dependencies
+node_modules/
+
+# Local test/build artifacts
+_t*.asar
+_t-*
+_tmp*
+*.tmp
+*.bak
+*.launcher.json
+*.asar
+*.asar.*
+
+# Editors / OS
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+
+# Local user config (never commit)
+config.json
+config.local.json
+
+# Build outputs
+dist/
+*.zip

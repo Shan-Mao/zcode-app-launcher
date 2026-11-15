@@ -1,0 +1,48 @@
+{
+  "buttons": [
+    {
+      "id": "vscode",
+      "label": "VS Code",
+      "icon": "🧩",
+      "cwd": "D:/projects/your-project",
+      "steps": [
+        {
+          "run": "\"C:/Program Files/Microsoft VS Code/Code.exe\" .",
+          "delayMs": 0
+        }
+      ]
+    },
+    {
+      "id": "browser",
+      "label": "打开文档",
+      "icon": "🌐",
+      "cwd": "",
+      "steps": [
+        {
+          "run": "start \"\" \"https://example.com\"",
+          "delayMs": 0
+        }
+      ]
+    },
+    {
+      "id": "dev-stack",
+      "label": "开发三件套",
+      "icon": "🚀",
+      "cwd": "D:/projects/your-project",
+      "steps": [
+        {
+          "run": "code .",
+          "delayMs": 2000
+        },
+        {
+          "run": "start \"\" \"C:/Program Files/Google/Chrome/Application/chrome.exe\" http://localhost:3000",
+          "delayMs": 1000
+        },
+        {
+          "run": "wt",
+          "delayMs": 0
+        }
+      ]
+    }
+  ]
+}

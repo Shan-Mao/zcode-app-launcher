@@ -1,0 +1,243 @@
+#!/usr/bin/env node
+// Installer for the ZCode launcher buttons.
+//
+//   node install.mjs            patch app.asar (no background service is created)
+//   node install.mjs --defer-loop   internal: wait for ZCode to close, then patch
+//
+// If ZCode is running, app.asar is locked; the installer arms a detached watcher
+// that patches as soon as the client exits, then goes away.
+
+import fs from "node:fs";
+import os from "node:os";
+import path from "node:path";
+import { spawn, spawnSync, execFileSync } from "node:child_process";
+import { fileURLToPath } from "node:url";
+
+const HERE = path.dirname(fileURLToPath(import.meta.url));
+const DATA = path.join(process.env.APPDATA || path.join(os.homedir(), ".config"), "zcode-app-launcher");
+const INSTALL_DIR = path.join(
+  process.env.LOCALAPPDATA || path.join(os.homedir(), "AppData", "Local"),
+  "Programs",
+  "zcode-app-launcher"
+);
+const STARTUP = path.join(
+  process.env.APPDATA || "",
+  "Microsoft",
+  "Windows",
+  "Start Menu",
+  "Programs",
+  "Startup"
+);
+const SHORTCUT = path.join(STARTUP, "ZCode App Launcher.lnk");
+const DEFER_VBS = path.join(DATA, "defer-install.vbs");
+const DEFER_LOCK = path.join(DATA, "defer.lock");
+const NODE = process.execPath;
+
+function fail(message) {
+  console.error(`[!] ${message}`);
+  process.exit(1);
+}
+
+function isZCodeRunning() {
+  try {
+    const out = execFileSync("tasklist", ["/FI", "IMAGENAME eq ZCode.exe", "/NH"], {
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    return /ZCode\.exe/i.test(out);
+  } catch {
+    return false;
+  }
+}
+
+function pidAlive(pid) {
+  try {
+    const out = execFileSync("tasklist", ["/FI", `PID eq ${pid}`, "/NH"], {
+      encoding: "utf8",
+      windowsHide: true,
+    });
+    return out.includes(String(pid));
+  } catch {
+    return false;
+  }
+}
+
+function run(cmd, args, opts = {}) {
+  try {
+    return execFileSync(cmd, args, { encoding: "utf8", windowsHide: true, ...opts });
+  } catch {
+    return "";
+  }
+}
+
+function logDefer(message) {
+  try {
+    fs.mkdirSync(DATA, { recursive: true });
+    fs.appendFileSync(path.join(DATA, "guard.log"), `${new Date().toISOString()} defer: ${message}\n`);
+  } catch {}
+}
+
+// ---------------------------------------------------------- legacy cleanup
+// Older builds shipped a resident HTTP service and a logon entry. Remove them:
+// the launcher now runs inside ZCode's main process on demand.
+function cleanupLegacy() {
+  try {
+    fs.unlinkSync(SHORTCUT);
+  } catch {}
+  run("schtasks", ["/Delete", "/TN", "ZCodeAppLauncherService", "/F"]);
+  run("schtasks", ["/Delete", "/TN", "ZCodeAppLauncherDefer", "/F"]);
+  for (const name of ["start-hidden.vbs", "service-task.vbs", "defer-install.vbs", "defer.lock"]) {
+    try {
+      fs.unlinkSync(path.join(DATA, name));
+    } catch {}
+  }
+  // Stop any leftover launcher service from the previous design.
+  run("powershell.exe", [
+    "-NoProfile",
+    "-ExecutionPolicy",
+    "Bypass",
+    "-Command",
+    "Get-CimInstance Win32_Process -Filter \"Name='node.exe'\" | Where-Object { $_.CommandLine -like '*zcode-app-launcher*server.mjs*' } | ForEach-Object { Stop-Process -Id $_.ProcessId -Force -ErrorAction SilentlyContinue }",
+  ]);
+}
+
+// ------------------------------------------------------------- self deploy
+function selfDeploy() {
+  if (path.resolve(HERE).toLowerCase() === path.resolve(INSTALL_DIR).toLowerCase()) return false;
+  console.log(`[0/3] 复制到固定位置：${INSTALL_DIR}`);
+  fs.mkdirSync(INSTALL_DIR, { recursive: true });
+  for (const entry of [
+    "lib",
+    "renderer",
+    "tests",
+    "patcher.mjs",
+    "install.mjs",
+    "uninstall.mjs",
+    "package.json",
+    "README.md",
+    "NOTICE.md",
+  ]) {
+    const src = path.join(HERE, entry);
+    if (!fs.existsSync(src)) continue;
+    fs.cpSync(src, path.join(INSTALL_DIR, entry), { recursive: true, force: true });
+  }
+  // Drop files from the previous (service-based) design.
+  try {
+    fs.rmSync(path.join(INSTALL_DIR, "server"), { recursive: true, force: true });
+  } catch {}
+  return true;
+}
+
+// ---------------------------------------------------------------- install
+function installNow() {
+  console.log("[1/3] 清理旧的常驻服务（如果有）…");
+  cleanupLegacy();
+
+  console.log("[2/3] 注入按钮栏与 IPC 桥…");
+  const res = spawnSync(NODE, [path.join(HERE, "patcher.mjs"), "--apply"], {
+    encoding: "utf8",
+    windowsHide: true,
+    timeout: 300000,
+  });
+  const out = `${res.stdout || ""}${res.stderr || ""}`.trim();
+  if (out) process.stdout.write(`${out}\n`);
+  if (res.status !== 0) {
+    logDefer(`patcher exit=${res.status}\n${out}`);
+    return false;
+  }
+
+  console.log("[3/3] 完成。没有任何后台进程常驻；命令由 ZCode 主进程直接执行。");
+  console.log("     完全重启 ZCode 后，左侧「插件市场」下方会出现按钮方块。");
+  return true;
+}
+
+// ---------------------------------------------------------- deferred install
+function writeDeferVbs() {
+  fs.mkdirSync(DATA, { recursive: true });
+  const content = [
+    "' Auto-generated by zcode-app-launcher.",
+    'Set sh = CreateObject("WScript.Shell")',
+    `sh.CurrentDirectory = "${HERE}"`,
+    `sh.Run """${NODE}"" ""${path.join(HERE, "install.mjs")}"" --defer-loop", 0, True`,
+    "",
+  ].join("\r\n");
+  fs.writeFileSync(DEFER_VBS, content, "utf8");
+}
+
+function armDeferred() {
+  console.log("[i] ZCode 正在运行，app.asar 被占用。");
+  console.log("    已安排延迟安装：完全退出 ZCode 后自动注入，完成后守候进程自行退出。");
+  writeDeferVbs();
+  // WMI-created process: parent is WmiPrvSE, so closing ZCode cannot kill it
+  // and Task Scheduler cannot reap its tree.
+  const cmd = `$r = Invoke-CimMethod -ClassName Win32_Process -MethodName Create -Arguments @{CommandLine='wscript.exe "${DEFER_VBS}"'}; $r.ProcessId`;
+  const out = run("powershell.exe", ["-NoProfile", "-ExecutionPolicy", "Bypass", "-Command", cmd]);
+  if (!/\d+/.test(out)) {
+    const child = spawn("wscript.exe", [DEFER_VBS], {
+      cwd: HERE,
+      detached: true,
+      stdio: "ignore",
+      windowsHide: true,
+    });
+    child.unref();
+  }
+  console.log("    现在可以直接退出 ZCode；几秒后自动完成，再打开即可。");
+}
+
+async function deferLoop() {
+  try {
+    const pid = Number(fs.readFileSync(DEFER_LOCK, "utf8").trim());
+    if (pid && pid !== process.pid && pidAlive(pid)) return;
+  } catch {}
+  fs.mkdirSync(DATA, { recursive: true });
+  fs.writeFileSync(DEFER_LOCK, String(process.pid));
+  logDefer(`watcher started (pid ${process.pid})`);
+
+  const deadline = Date.now() + 7 * 24 * 3600 * 1000;
+  try {
+    while (Date.now() < deadline) {
+      if (!isZCodeRunning()) {
+        logDefer("ZCode closed, applying patch");
+        const ok = installNow();
+        logDefer(ok ? "install complete" : "install attempt failed, retrying");
+        if (ok) return;
+        await new Promise((r) => setTimeout(r, 1500));
+        continue;
+      }
+      await new Promise((r) => setTimeout(r, 500));
+    }
+  } finally {
+    try {
+      fs.unlinkSync(DEFER_LOCK);
+    } catch {}
+    try {
+      fs.unlinkSync(DEFER_VBS);
+    } catch {}
+  }
+}
+
+async function main() {
+  const args = process.argv.slice(2);
+
+  if (selfDeploy()) {
+    const child = spawnSync(NODE, [path.join(INSTALL_DIR, "install.mjs"), ...args], {
+      stdio: "inherit",
+      windowsHide: false,
+    });
+    process.exit(child.status ?? 1);
+  }
+
+  if (args.includes("--defer-loop")) {
+    await deferLoop();
+    return;
+  }
+
+  if (isZCodeRunning()) {
+    armDeferred();
+    return;
+  }
+
+  if (!installNow()) fail("注入失败。确认 ZCode 已完全退出后重试。");
+}
+
+main().catch((err) => fail(err.stack || String(err)));

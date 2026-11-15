@@ -1,0 +1,37 @@
+{
+  "name": "zcode-app-launcher",
+  "version": "0.2.0",
+  "description": "Launch external apps and chained app workflows from a block above ZCode's task list.",
+  "type": "module",
+  "license": "MIT",
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [
+    "zcode",
+    "launcher",
+    "app-launcher",
+    "electron",
+    "asar"
+  ],
+  "scripts": {
+    "check": "node patcher.mjs --check",
+    "apply": "node patcher.mjs --apply",
+    "revert": "node patcher.mjs --revert",
+    "install": "node install.mjs",
+    "uninstall": "node uninstall.mjs",
+    "test:fixture": "node tests/make-asar.mjs .tmp-test.asar"
+  },
+  "files": [
+    "patcher.mjs",
+    "install.mjs",
+    "uninstall.mjs",
+    "lib",
+    "renderer",
+    "examples",
+    "docs",
+    "LICENSE",
+    "NOTICE.md",
+    "README.md"
+  ]
+}
