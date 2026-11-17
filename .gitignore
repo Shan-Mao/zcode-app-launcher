@@ -24,3 +24,6 @@ config.local.json
 # Build outputs
 dist/
 *.zip
+
+# Local test scratch
+.ui/

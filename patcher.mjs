@@ -44,6 +44,7 @@ function parseArgs(argv) {
     else if (a === "--check") args.mode = "check";
     else if (a === "--revert" || a === "--remove") args.mode = "revert";
     else if (a === "--force") args.force = true;
+    else if (a === "--print-asar") args.mode = "print-asar";
     else if (a === "--asar") args.asar = argv[++i] || "";
     else if (a === "--zcode") args.zcode = argv[++i] || "";
     else if (a === "--help" || a === "-h") args.mode = "help";
@@ -119,7 +120,7 @@ function preloadBlock(alias) {
     MARK_BEGIN +
     `launcherGetConfig:function(){return ${ipc}("zcode-launcher:get-config")},` +
     `launcherSetConfig:function(t){return ${ipc}("zcode-launcher:set-config",t)},` +
-    `launcherLaunch:function(t){return ${ipc}("zcode-launcher:launch",t)},` +
+    `launcherLaunch:function(t,n){return ${ipc}("zcode-launcher:launch",t,n)},` +
     `launcherPickProgram:function(){return ${ipc}("zcode-launcher:pick-program")},` +
     `launcherPickFolder:function(){return ${ipc}("zcode-launcher:pick-folder")},` +
     MARK_END
@@ -139,10 +140,19 @@ function __zlSan(raw){
     for(var j=0;j<ss.length;j++){
       var st=ss[j]||{},run=String(st.run||"").trim();
       if(!run||run.length>2000)continue;
-      steps.push({run:run,delayMs:Math.max(0,Number(st.delayMs)||0)});
+      steps.push({run:run,delayMs:Math.max(0,Number(st.delayMs)||0),label:String(st.label||"").slice(0,40)});
     }
     out.buttons.push({id:id,label:String(it.label||id).slice(0,40),icon:String(it.icon||"▸").slice(0,8),cwd:String(it.cwd||"").slice(0,400),steps:steps});
   }
+  var __fs=function(v,d){var n=Number(v);return (n>=11&&n<=18)?n:d};
+  var __op=function(v,d){var n=Number(v);return (n>=0&&n<=100)?n:d};
+  var __ui=raw&&raw.ui||{};
+  out.ui={
+    barFontSize:__fs(__ui.barFontSize,12),
+    panelFontSize:__fs(__ui.panelFontSize,12),
+    barOpacity:__op(__ui.barOpacity,100),
+    panelOpacity:__op(__ui.panelOpacity,100)
+  };
   return out;
 }
 function __zlCtx(){
@@ -190,20 +200,25 @@ ${ipc}.handle("zcode-launcher:pick-folder",function(){
     });
   }).catch(function(){return null});
 });
-${ipc}.handle("zcode-launcher:launch",function(ev,id){
+${ipc}.handle("zcode-launcher:launch",function(ev,id,stepIndex){
   return __zlCtx().then(function(c){
     var cfg=__zlRead(c);
     var btn=null;
     for(var i=0;i<cfg.buttons.length;i++){if(cfg.buttons[i].id===id){btn=cfg.buttons[i];break}}
     if(!btn)return {ok:false,error:"未知按钮："+id};
     if(!btn.steps.length)return {ok:false,error:"这个按钮还没有配置命令"};
+    var steps=btn.steps;
+    if(typeof stepIndex=="number"){
+      if(stepIndex<0||stepIndex>=steps.length)return {ok:false,error:"步骤不存在"};
+      steps=[steps[stepIndex]];
+    }
     return import("node:child_process").then(function(cp){
       var cwd=btn.cwd||c.o.homedir();
       try{if(!c.f.existsSync(cwd))cwd=c.o.homedir()}catch(e){cwd=c.o.homedir()}
       var k=0;
       function next(){
-        if(k>=btn.steps.length)return Promise.resolve({ok:true});
-        var step=btn.steps[k++];
+        if(k>=steps.length)return Promise.resolve({ok:true});
+        var step=steps[k++];
         try{
           var child=cp.spawn("cmd.exe",["/d","/s","/c",step.run],{cwd:cwd,detached:true,stdio:"ignore",windowsHide:true});
           child.on("error",function(){});
@@ -467,6 +482,10 @@ function main() {
   if (!fs.existsSync(asar)) {
     console.error(`[!] 文件不存在：${asar}`);
     return 1;
+  }
+  if (args.mode === "print-asar") {
+    console.log(asar);
+    return 0;
   }
   try {
     if (args.mode === "apply") return apply(asar, args);

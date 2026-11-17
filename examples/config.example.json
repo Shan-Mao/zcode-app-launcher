@@ -1,4 +1,10 @@
 {
+  "ui": {
+    "barFontSize": 12,
+    "panelFontSize": 12,
+    "barOpacity": 100,
+    "panelOpacity": 100
+  },
   "buttons": [
     {
       "id": "vscode",
@@ -7,6 +13,7 @@
       "cwd": "D:/projects/your-project",
       "steps": [
         {
+          "label": "打开项目",
           "run": "\"C:/Program Files/Microsoft VS Code/Code.exe\" .",
           "delayMs": 0
         }
@@ -19,6 +26,7 @@
       "cwd": "",
       "steps": [
         {
+          "label": "示例网站",
           "run": "start \"\" \"https://example.com\"",
           "delayMs": 0
         }
@@ -31,14 +39,17 @@
       "cwd": "D:/projects/your-project",
       "steps": [
         {
+          "label": "VS Code",
           "run": "code .",
           "delayMs": 2000
         },
         {
+          "label": "浏览器",
           "run": "start \"\" \"C:/Program Files/Google/Chrome/Application/chrome.exe\" http://localhost:3000",
           "delayMs": 1000
         },
         {
+          "label": "终端",
           "run": "wt",
           "delayMs": 0
         }

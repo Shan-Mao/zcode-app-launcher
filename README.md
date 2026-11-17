@@ -10,6 +10,9 @@
 ## 特性
 
 - 竖排按钮：图标在左、名称在右，一行一个启动项
+- 分组菜单：一级点击 = 整组按顺序启动；展开后可以单独启动其中某个程序
+- 排序：配置面板里用 ↑/↓ 调整一级按钮和二级步骤的顺序
+- 亮暗色跟随系统；侧栏与设置页的字号、背景不透明度可分别设置
 - 每步二选一：**选择程序**（文件选择框）或 **写命令**（cmd 命令行）
 - 多步 = 启动链，每步可设置等待毫秒数
 - **没有任何常驻进程**：点按钮时由 ZCode 主进程执行一次命令链，启动完即返回
@@ -46,6 +49,8 @@
    node install.mjs
    ```
 
+   或者直接双击 `install.cmd`（会检查 Node，然后启动安装）。
+
    安装脚本会：
 
    - 复制到固定目录 `%LOCALAPPDATA%\Programs\zcode-app-launcher`
@@ -56,8 +61,17 @@
 
 ### ZCode 正在运行时安装
 
-直接执行 `node install.mjs` 不会失败：脚本会安排一个独立守候进程，等你**完全退出** ZCode 后自动
-注入，写完自行退出。建议退出后等待约 15 秒再打开客户端，避免文件仍被占用。
+直接执行 `node install.mjs` 不会失败，会弹出三选项对话框：
+
+| 选项 | 行为 |
+| --- | --- |
+| **是，立即重启并使用** | 请求退出 ZCode，托盘仍在运行则强制结束 → 自动注入 → 自动重新打开 |
+| **否，关闭后自动重启并使用** | 等你手动关闭 ZCode → 自动注入 → 自动重新打开 |
+| **否，关闭后自动使用，不重启** | 等你手动关闭 ZCode → 自动注入，不打开客户端 |
+| **取消** | 不做任何修改 |
+
+三种方式都使用同一个独立守候进程（由系统服务拉起，不随 ZCode 退出被结束）。注入完成后
+守候进程自行退出。建议关闭客户端后等待约 15 秒，避免文件仍被占用。
 
 取消待安装：
 
@@ -103,10 +117,18 @@ start "" "https://example.com"
 
 命令由 `cmd.exe /d /s /c` 执行，所以 `start`、`explorer`、PATH 里的命令都可以直接用。
 
-### 配置启动链
+### 配置启动链与分组
+
+顺序调整：配置面板左侧列表的 ↑/↓ 调整一级按钮；每个步骤标题旁的 ↑/↓ 调整二级顺序。
 
 在同一个按钮里点「＋ 再加一个程序」，添加多个步骤即可。每步的「等待」表示发出这一步后，
 隔多少毫秒再执行下一步。
+
+一个按钮包含多个步骤时，它就是一个**分组**：
+
+- 点**一级行**：按顺序整组启动
+- 点右侧 **▸** 展开：出现每个程序的子项，点哪个就只启动哪个
+- 每步可以在「名称」里给子项起名（不填就用程序名）
 
 例如「开发三件套」：
 
@@ -121,21 +143,27 @@ start "" "https://example.com"
 
 ```json
 {
+  "ui": { "barFontSize": 12, "panelFontSize": 12 },
   "buttons": [
     {
-      "id": "vscode",
-      "label": "VS Code",
-      "icon": "🧩",
+      "id": "dev-stack",
+      "label": "开发三件套",
+      "icon": "🚀",
       "cwd": "D:/projects/your-project",
       "steps": [
-        { "run": "\"C:/Program Files/Microsoft VS Code/Code.exe\" .", "delayMs": 0 }
+        { "label": "VS Code", "run": "code .", "delayMs": 2000 },
+        { "label": "浏览器", "run": "start \"\" chrome.exe http://localhost:3000", "delayMs": 1000 },
+        { "label": "终端", "run": "wt", "delayMs": 0 }
       ]
     }
   ]
 }
 ```
 
+- `ui.barFontSize`：侧栏方块字号（11–18，默认 12）
+- `ui.panelFontSize`：设置面板字号（11–18，默认 12）
 - `run`：启动该步骤的命令。选择程序时写成 `"完整路径"`，可再跟参数
+- `label`（步骤级）：展开菜单里显示的名字
 - `cwd`：工作目录，留空使用用户主目录
 - `delayMs`：执行下一步前的等待毫秒数（上限 15 秒）
 
@@ -199,8 +227,12 @@ node patcher.mjs --revert --asar _t.asar --force
 ├── patcher.mjs                  注入 / 检查 / 还原
 ├── install.mjs                  一键安装（含延迟安装守候）
 ├── uninstall.mjs                一键卸载
+├── install.cmd                  双击安装入口
+├── uninstall.cmd                双击卸载入口
 ├── renderer/
 │   └── zcode-app-launcher.js    左侧方块与配置面板
+├── assets/
+│   └── prompt.ps1               安装时的三选项对话框
 ├── lib/
 │   └── asar.mjs                 asar 读写与重打包
 ├── examples/
@@ -208,7 +240,8 @@ node patcher.mjs --revert --asar _t.asar --force
 ├── tests/
 │   └── make-asar.mjs            测试用 asar 生成器
 ├── docs/
-│   └── screenshot.png
+│   ├── screenshot.png
+│   └── release-v1.1.0.md
 ├── LICENSE
 ├── NOTICE.md
 └── README.md

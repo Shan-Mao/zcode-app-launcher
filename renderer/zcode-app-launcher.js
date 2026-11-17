@@ -36,6 +36,19 @@
   const FALLBACK_ANCHOR = '[data-purpose-section-list="true"]';
 
   const state = { config: null, error: "", loading: true };
+  const expanded = new Set();
+  const clampFs = (n, d = 12) => {
+    n = Number(n);
+    return Number.isFinite(n) && n >= 11 && n <= 18 ? n : d;
+  };
+  const barFs = () => clampFs(state.config && state.config.ui && state.config.ui.barFontSize);
+  const panelFs = () => clampFs(state.config && state.config.ui && state.config.ui.panelFontSize);
+  const clampOp = (n, d = 100) => {
+    n = Number(n);
+    return Number.isFinite(n) && n >= 0 && n <= 100 ? n : d;
+  };
+  const barOpacity = () => clampOp(state.config && state.config.ui && state.config.ui.barOpacity);
+  const panelOpacity = () => clampOp(state.config && state.config.ui && state.config.ui.panelOpacity);
   const diag = (window.__zcodeAppLauncherDiag = { mounts: 0, errors: [] });
 
   // ---------------------------------------------------------------- utilities
@@ -87,9 +100,9 @@
         box-sizing: border-box;
         border-radius: 10px;
         border: 1px solid rgba(127,127,127,.14);
-        background: rgba(127,127,127,.07);
-        font-size: 12px;
-        line-height: 18px;
+        background: rgba(127,127,127, calc(.07 * var(--zl-bar-opacity, 1)));
+        font-size: var(--zl-fs, 12px);
+        line-height: calc(var(--zl-fs, 12px) + 6px);
         color: var(--vscode-foreground, inherit);
         user-select: none;
         overflow: hidden;
@@ -101,7 +114,7 @@
         justify-content: flex-start;
         gap: 8px;
         width: 100%;
-        height: 27px;
+        height: calc(var(--zl-fs, 12px) + 15px);
         padding: 0 7px;
         border: 0;
         border-radius: 6px;
@@ -121,8 +134,8 @@
         width: 18px;
         flex: none;
         text-align: center;
-        font-size: 14px;
-        line-height: 18px;
+        font-size: calc(var(--zl-fs, 12px) + 2px);
+        line-height: 1;
       }
       #${BAR_ID} .zl-btn .zl-label {
         flex: 1;
@@ -136,9 +149,50 @@
         border-top: 1px solid rgba(127,127,127,.12);
         border-radius: 0 0 6px 6px;
         padding-top: 3px;
-        height: 26px;
+        height: calc(var(--zl-fs, 12px) + 14px);
       }
       #${BAR_ID} .zl-btn.zl-gear:hover { opacity: 1; }
+      #${BAR_ID} .zl-btn .zl-caret {
+        margin-left: auto;
+        width: 22px;
+        height: 22px;
+        flex: none;
+        display: inline-flex;
+        align-items: center;
+        justify-content: center;
+        border: 0;
+        border-radius: 5px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-size: 14px;
+        line-height: 1;
+        cursor: pointer;
+        opacity: .65;
+      }
+      #${BAR_ID} .zl-btn .zl-caret:hover { background: rgba(127,127,127,.22); opacity: 1; }
+      #${BAR_ID} .zl-sub {
+        display: flex;
+        align-items: center;
+        gap: 8px;
+        width: 100%;
+        height: calc(var(--zl-fs, 12px) + 12px);
+        padding: 0 7px 0 26px;
+        border: 0;
+        border-radius: 6px;
+        background: transparent;
+        color: inherit;
+        font: inherit;
+        font-size: var(--zl-fs, 12px);
+        text-align: left;
+        cursor: pointer;
+        opacity: .8;
+        white-space: nowrap;
+        overflow: hidden;
+      }
+      #${BAR_ID} .zl-sub:hover { background: rgba(127,127,127,.14); opacity: 1; }
+      #${BAR_ID} .zl-sub .zl-ico { width: 18px; flex: none; text-align: center; font-size: var(--zl-fs, 12px); }
+      #${BAR_ID} .zl-sub .zl-label { flex: 1; min-width: 0; overflow: hidden; text-overflow: ellipsis; }
       #${BAR_ID} .zl-btn.zl-ok { color: #3fb950; }
       #${BAR_ID} .zl-btn.zl-err { color: #f85149; }
       #${BAR_ID} .zl-btn.zl-busy { opacity: .5; }
@@ -151,13 +205,16 @@
         position: fixed; inset: 0; z-index: 2147483000;
         background: rgba(0,0,0,.45);
         display: flex; align-items: center; justify-content: center;
-        font-size: 13px;
+        font-size: var(--zl-fs-panel, 12px);
       }
       .zl-modal {
         width: min(620px, calc(100vw - 48px));
         max-height: min(560px, calc(100vh - 64px));
         display: flex; flex-direction: column;
+        font-size: calc(var(--zl-fs-panel, 12px) + 1px);
+        color-scheme: dark;
         background: var(--vscode-editor-background, #1f1f22);
+        background: color-mix(in srgb, var(--vscode-editor-background, #1f1f22) calc(96% * var(--zl-panel-opacity, 1)), transparent);
         color: var(--vscode-foreground, #e6e6e6);
         border: 1px solid rgba(127,127,127,.28);
         border-radius: 10px;
@@ -171,7 +228,11 @@
       }
       .zl-modal-foot { border-bottom: 0; border-top: 1px solid rgba(127,127,127,.18); justify-content: flex-end; }
       .zl-modal-title { font-weight: 600; flex: 1; }
+      .zl-head-tabs { display: flex; gap: 2px; flex: none; }
       .zl-modal-body { display: flex; gap: 0; flex: 1; min-height: 0; }
+      .zl-prefs { flex: 1; overflow: auto; padding: 18px 20px; display: flex; flex-direction: column; gap: 14px; }
+      .zl-pref-title { font-weight: 600; opacity: .85; margin-top: 4px; }
+      .zl-range { flex: 1; accent-color: #2f6feb; }
       .zl-list { width: 180px; border-right: 1px solid rgba(127,127,127,.18); overflow: auto; padding: 8px; }
       .zl-list-item {
         display: flex; align-items: center; gap: 6px;
@@ -181,15 +242,32 @@
       }
       .zl-list-item:hover { background: rgba(127,127,127,.14); }
       .zl-list-item.zl-active { background: rgba(127,127,127,.22); }
+      .zl-list-name { display: flex; align-items: center; gap: 6px; flex: 1; min-width: 0; }
+      .zl-list-ops { display: flex; gap: 2px; flex: none; }
+      .zl-mini {
+        width: 20px; height: 20px; padding: 0;
+        border: 0; border-radius: 4px; background: transparent;
+        color: inherit; font: inherit; font-size: 12px; line-height: 1;
+        cursor: pointer; opacity: .55;
+      }
+      .zl-mini:hover:not(:disabled) { background: rgba(127,127,127,.2); opacity: 1; }
+      .zl-mini:disabled { opacity: .2; cursor: default; }
       .zl-form { flex: 1; overflow: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 10px; }
       .zl-row { display: flex; align-items: center; gap: 8px; }
       .zl-row > label { width: 68px; flex: none; opacity: .75; }
       .zl-input {
-        flex: 1; min-width: 0; height: 28px; padding: 0 8px;
+        flex: 1; min-width: 0; height: calc(var(--zl-fs-panel, 12px) + 16px); padding: 0 8px;
         border: 1px solid rgba(127,127,127,.3); border-radius: 6px;
         background: rgba(127,127,127,.08); color: inherit; font: inherit;
       }
       .zl-input:focus { outline: 1px solid rgba(90,160,255,.7); border-color: transparent; }
+      .zl-size {
+        width: 96px;
+        flex: none;
+        color-scheme: dark;
+        background: rgba(127,127,127,.12);
+      }
+      .zl-size option { background: #1f1f22; color: #e6e6e6; }
       .zl-steps { display: flex; flex-direction: column; gap: 8px; }
       .zl-step-card {
         display: flex; flex-direction: column; gap: 7px;
@@ -200,13 +278,13 @@
       }
       .zl-step-title {
         display: flex; align-items: center; justify-content: space-between;
-        gap: 8px; font-size: 12px; opacity: .8;
+        gap: 8px; opacity: .8;
       }
       .zl-tabs { display: flex; gap: 2px; margin-left: auto; }
       .zl-tab {
-        height: 22px; padding: 0 8px; border: 0; border-radius: 5px;
-        background: transparent; color: inherit; font: inherit; font-size: 12px;
-        cursor: pointer; opacity: .55;
+        height: calc(var(--zl-fs-panel, 12px) + 10px); padding: 0 8px; border: 0; border-radius: 5px;
+        background: transparent; color: inherit; font: inherit;
+        font-size: inherit; cursor: pointer; opacity: .55;
       }
       .zl-tab:hover { background: rgba(127,127,127,.14); opacity: .85; }
       .zl-tab.zl-active { background: rgba(127,127,127,.22); opacity: 1; }
@@ -214,7 +292,7 @@
       .zl-step .zl-input.zl-cmd { flex: 1; }
       .zl-step .zl-input.zl-delay { width: 76px; flex: none; text-align: right; }
       .zl-btn2 {
-        height: 28px; padding: 0 12px; border-radius: 6px; cursor: pointer;
+        height: calc(var(--zl-fs-panel, 12px) + 16px); padding: 0 12px; border-radius: 6px; cursor: pointer;
         border: 1px solid rgba(127,127,127,.3); background: transparent;
         color: inherit; font: inherit;
       }
@@ -222,24 +300,57 @@
       .zl-btn2.zl-primary { background: #2f6feb; border-color: #2f6feb; color: #fff; }
       .zl-btn2.zl-danger { color: #f85149; }
       .zl-btn2:disabled { opacity: .45; cursor: default; }
-      .zl-hint { opacity: .55; font-size: 12px; line-height: 1.5; }
+      .zl-hint { opacity: .55; font-size: inherit; line-height: 1.5; }
       .zl-empty { opacity: .6; padding: 24px 0; text-align: center; }
       .zl-toast {
         position: fixed; z-index: 2147483200; right: 20px; bottom: 20px;
         max-width: 360px; padding: 10px 14px; border-radius: 8px;
-        background: rgba(30,30,34,.96); color: #eee; font-size: 12px;
+        background: rgba(30,30,34,.96); color: #eee; font-size: var(--zl-fs-panel, 12px);
         border: 1px solid rgba(127,127,127,.3); box-shadow: 0 8px 24px rgba(0,0,0,.35);
+      }
+
+      @media (prefers-color-scheme: light) {
+        #${BAR_ID} { background: rgba(0,0,0, calc(.04 * var(--zl-bar-opacity, 1))); border-color: rgba(0,0,0,.1); }
+        #${BAR_ID} .zl-btn:hover { background: rgba(0,0,0,.06); }
+        #${BAR_ID} .zl-btn:active { background: rgba(0,0,0,.1); }
+        #${BAR_ID} .zl-btn.zl-gear { border-top-color: rgba(0,0,0,.08); }
+        #${BAR_ID} .zl-btn .zl-caret:hover { background: rgba(0,0,0,.08); }
+        #${BAR_ID} .zl-sub:hover { background: rgba(0,0,0,.05); }
+        .zl-modal {
+          background: var(--vscode-editor-background, #ffffff);
+          background: color-mix(in srgb, var(--vscode-editor-background, #ffffff) calc(96% * var(--zl-panel-opacity, 1)), transparent);
+          color: var(--vscode-foreground, #1f2328);
+          border-color: rgba(0,0,0,.12);
+          box-shadow: 0 18px 48px rgba(0,0,0,.18);
+          color-scheme: light;
+        }
+        .zl-size { color-scheme: light; background: rgba(0,0,0,.03); }
+        .zl-size option { background: #ffffff; color: #1f2328; }
+        .zl-modal-head, .zl-modal-foot { border-color: rgba(0,0,0,.08); }
+        .zl-list { border-color: rgba(0,0,0,.08); }
+        .zl-list-item:hover { background: rgba(0,0,0,.05); }
+        .zl-list-item.zl-active { background: rgba(0,0,0,.08); }
+        .zl-input { background: rgba(0,0,0,.03); border-color: rgba(0,0,0,.16); }
+        .zl-btn2 { border-color: rgba(0,0,0,.16); }
+        .zl-btn2:hover { background: rgba(0,0,0,.05); }
+        .zl-step-card { border-color: rgba(0,0,0,.1); background: rgba(0,0,0,.02); }
+        .zl-tab:hover { background: rgba(0,0,0,.06); }
+        .zl-tab.zl-active { background: rgba(0,0,0,.1); }
+        .zl-toast {
+          background: #ffffff; color: #1f2328;
+          border-color: rgba(0,0,0,.12); box-shadow: 0 8px 24px rgba(0,0,0,.15);
+        }
       }
     `;
     document.head.append(h("style", { id: STYLE_ID, text: css }));
   }
 
   // --------------------------------------------------------------- launch bar
-  function launch(id, btn) {
+  function launch(id, btn, stepIndex) {
     btn.classList.add("zl-busy");
-    btn.disabled = true;
+    if ("disabled" in btn) btn.disabled = true;
     Promise.resolve()
-      .then(() => requireBridge().launcherLaunch(id))
+      .then(() => requireBridge().launcherLaunch(id, stepIndex))
       .then((res) => {
         if (res && res.ok === false) throw new Error(res.error || "启动失败");
         btn.classList.add("zl-ok");
@@ -253,77 +364,90 @@
       })
       .finally(() => {
         btn.classList.remove("zl-busy");
-        btn.disabled = false;
+        if ("disabled" in btn) btn.disabled = false;
       });
   }
 
-  function buttonEl(item) {
-    const icon = h("span", { class: "zl-ico", text: item.icon || "▸" });
-    const label = h("span", { class: "zl-label", text: item.label || item.id });
-    const chain = (item.steps || []).length > 1 ? ` · ${item.steps.length} 步` : "";
-    const btn = h(
-      "button",
-      {
-        class: "zl-btn",
-        "aria-label": item.label || item.id,
-        title: `${item.label || item.id}${chain}\n${(item.steps || []).map((s) => s.run).join("\n")}`,
-      },
-      icon,
-      label
-    );
-    btn.addEventListener("click", (e) => {
-      e.preventDefault();
-      e.stopPropagation();
-      launch(item.id, btn);
-    });
-    return btn;
+  const baseName = (p) =>
+    String(p || "")
+      .split(/[\\/]/)
+      .pop()
+      .replace(/\.(exe|bat|cmd|lnk)$/i, "");
+
+  function stepLabel(step, i) {
+    if (step.label) return step.label;
+    const parsed = splitRun(step.run);
+    if (parsed.program) return baseName(parsed.program) || `第 ${i + 1} 步`;
+    const first = String(step.run || "").trim().split(/\s+/)[0] || "";
+    return baseName(first) || `第 ${i + 1} 步`;
   }
 
-  function moreMenu(items, anchor) {
-    document.querySelectorAll(".zl-more-menu").forEach((n) => n.remove());
-    const rect = anchor.getBoundingClientRect();
-    const menu = h(
+  function groupEl(item) {
+    const steps = item.steps || [];
+    const isGroup = steps.length > 1;
+    const open = expanded.has(item.id);
+    const frag = document.createDocumentFragment();
+
+    const row = h(
       "div",
       {
-        class: "zl-more-menu",
-        style: {
-          position: "fixed",
-          zIndex: 2147482500,
-          top: `${Math.round(rect.bottom + 4)}px`,
-          left: `${Math.round(rect.left)}px`,
-          minWidth: "168px",
-          padding: "4px",
-          borderRadius: "8px",
-          background: "var(--vscode-menu-background, #252528)",
-          color: "var(--vscode-menu-foreground, #eee)",
-          border: "1px solid rgba(127,127,127,.3)",
-          boxShadow: "0 12px 32px rgba(0,0,0,.4)",
-          fontSize: "12px",
-        },
+        class: "zl-btn",
+        role: "button",
+        tabindex: "0",
+        "aria-label": item.label || item.id,
+        title: `${item.label || item.id}${isGroup ? `：整组按顺序启动（${steps.length} 步）` : ""}\n${steps
+          .map((s) => s.run)
+          .join("\n")}`,
       },
-      items.map((item) =>
-        h(
-          "button",
-          { class: "zl-list-item", style: { width: "100%" } },
-          h("span", { text: item.icon || "▸" }),
-          h("span", { text: item.label || item.id })
-        )
-      )
+      h("span", { class: "zl-ico", text: item.icon || "▸" }),
+      h("span", { class: "zl-label", text: item.label || item.id })
     );
-    menu.querySelectorAll("button").forEach((b, i) => {
-      b.addEventListener("click", () => {
-        menu.remove();
-        launch(items[i].id, b);
-      });
-    });
-    document.body.append(menu);
-    const close = (e) => {
-      if (!menu.contains(e.target)) {
-        menu.remove();
-        document.removeEventListener("mousedown", close, true);
+
+    row.addEventListener("click", () => launch(item.id, row));
+    row.addEventListener("keydown", (e) => {
+      if (e.key === "Enter" || e.key === " ") {
+        e.preventDefault();
+        launch(item.id, row);
       }
-    };
-    setTimeout(() => document.addEventListener("mousedown", close, true), 0);
+    });
+
+    if (isGroup) {
+      const caret = h("button", {
+        class: "zl-caret",
+        type: "button",
+        title: open ? "收起" : "展开，可单独启动每个程序",
+        "aria-label": open ? "收起" : "展开",
+        "aria-expanded": String(open),
+        text: open ? "▾" : "▸",
+      });
+      caret.addEventListener("click", (e) => {
+        e.preventDefault();
+        e.stopPropagation();
+        if (open) expanded.delete(item.id);
+        else expanded.add(item.id);
+        renderBar();
+      });
+      row.append(caret);
+    }
+    frag.append(row);
+
+    if (isGroup && open) {
+      steps.forEach((step, i) => {
+        const sub = h(
+          "button",
+          { class: "zl-sub", type: "button", title: step.run, "aria-label": stepLabel(step, i) },
+          h("span", { class: "zl-ico", text: "•" }),
+          h("span", { class: "zl-label", text: stepLabel(step, i) })
+        );
+        sub.addEventListener("click", (e) => {
+          e.preventDefault();
+          e.stopPropagation();
+          launch(item.id, sub, i);
+        });
+        frag.append(sub);
+      });
+    }
+    return frag;
   }
 
   const findAnchor = () =>
@@ -339,6 +463,8 @@
       anchor.parentElement.insertBefore(bar, anchor);
       diag.mounts += 1;
     }
+    bar.style.setProperty("--zl-fs", `${barFs()}px`);
+    bar.style.setProperty("--zl-bar-opacity", String(barOpacity() / 100));
     bar.replaceChildren();
     if (state.loading) {
       bar.append(h("span", { class: "zl-btn zl-busy", text: "…" }));
@@ -356,7 +482,7 @@
       return;
     }
     const items = (state.config && state.config.buttons) || [];
-    for (const item of items) bar.append(buttonEl(item));
+    for (const item of items) bar.append(groupEl(item));
     if (!items.length) {
       const hint = h("button", { class: "zl-btn", title: "还没有启动项，点这里添加", "aria-label": "添加启动项" });
       hint.append(
@@ -420,12 +546,128 @@
     if (document.querySelector(".zl-modal-mask")) return;
     const draft = JSON.parse(JSON.stringify(state.config || { port: 0, buttons: [] }));
     draft.buttons = Array.isArray(draft.buttons) ? draft.buttons : [];
+    const srcUi = draft.ui || {};
+    draft.ui = {
+      barFontSize: clampFs(srcUi.barFontSize, barFs()),
+      panelFontSize: clampFs(srcUi.panelFontSize, panelFs()),
+      barOpacity: clampOp(srcUi.barOpacity, barOpacity()),
+      panelOpacity: clampOp(srcUi.panelOpacity, panelOpacity()),
+    };
     let selected = draft.buttons.length ? 0 : -1;
+    let page = "buttons";
+
+    const sizeSelect = (value, onChange) => {
+      const sel = h("select", { class: "zl-input zl-size" });
+      for (const [label, v] of [
+        ["小 11", 11],
+        ["标准 12", 12],
+        ["大 14", 14],
+        ["特大 16", 16],
+        ["极大 18", 18],
+      ]) {
+        const opt = h("option", { value: String(v), text: label });
+        if (v === value) opt.selected = true;
+        sel.append(opt);
+      }
+      sel.addEventListener("change", () => onChange(Number(sel.value)));
+      return sel;
+    };
+
+    const opRange = (label, value, onChange) => {
+      const out = h("span", {
+        class: "zl-hint",
+        style: { width: "44px", textAlign: "right", flex: "none" },
+        text: `${value}%`,
+      });
+      const input = h("input", {
+        class: "zl-range",
+        type: "range",
+        min: "0",
+        max: "100",
+        step: "1",
+        value: String(value),
+      });
+      input.addEventListener("input", () => {
+        const v = Number(input.value);
+        out.textContent = `${v}%`;
+        onChange(v);
+      });
+      return h("div", { class: "zl-row" }, h("label", { text: label }), input, out);
+    };
 
     const list = h("div", { class: "zl-list" });
     const form = h("div", { class: "zl-form" });
+    const body = h("div", { class: "zl-modal-body" });
+    const tabsEl = h("div", { class: "zl-head-tabs" });
     const saveBtn = h("button", { class: "zl-btn2 zl-primary", text: "保存" });
     const cancelBtn = h("button", { class: "zl-btn2", text: "取消" });
+
+    const prefsPage = () => {
+      const wrap = h("div", { class: "zl-prefs" });
+      wrap.append(
+        h("div", { class: "zl-pref-title", text: "字号" }),
+        h(
+          "div",
+          { class: "zl-row" },
+          h("label", { text: "侧栏" }),
+          sizeSelect(draft.ui.barFontSize, (v) => {
+            draft.ui.barFontSize = v;
+            const bar = document.getElementById(BAR_ID);
+            if (bar) bar.style.setProperty("--zl-fs", `${v}px`);
+          })
+        ),
+        h(
+          "div",
+          { class: "zl-row" },
+          h("label", { text: "设置页" }),
+          sizeSelect(draft.ui.panelFontSize, (v) => {
+            draft.ui.panelFontSize = v;
+            mask.style.setProperty("--zl-fs-panel", `${v}px`);
+          })
+        ),
+        h("div", { class: "zl-pref-title", text: "背景不透明度" }),
+        opRange("侧栏", draft.ui.barOpacity, (v) => {
+          draft.ui.barOpacity = v;
+          const bar = document.getElementById(BAR_ID);
+          if (bar) bar.style.setProperty("--zl-bar-opacity", String(v / 100));
+        }),
+        opRange("设置页", draft.ui.panelOpacity, (v) => {
+          draft.ui.panelOpacity = v;
+          mask.style.setProperty("--zl-panel-opacity", String(v / 100));
+        }),
+        h("div", {
+          class: "zl-hint",
+          text: "调低后可以透出 ZCode 的背景/壁纸；0% 完全透明，100% 不透明。",
+        })
+      );
+      return wrap;
+    };
+
+    const paintTabs = () => {
+      tabsEl.replaceChildren();
+      for (const [text, value] of [
+        ["启动项", "buttons"],
+        ["个性化", "prefs"],
+      ]) {
+        const b = h("button", {
+          class: `zl-tab${page === value ? " zl-active" : ""}`,
+          type: "button",
+          text,
+        });
+        b.addEventListener("click", () => {
+          page = value;
+          renderBody();
+        });
+        tabsEl.append(b);
+      }
+    };
+
+    const renderBody = () => {
+      paintTabs();
+      body.replaceChildren();
+      if (page === "buttons") body.append(list, form);
+      else body.append(prefsPage());
+    };
 
     const mask = h(
       "div",
@@ -436,10 +678,10 @@
         h(
           "div",
           { class: "zl-modal-head" },
-          h("div", { class: "zl-modal-title", text: "启动项" }),
-          h("span", { class: "zl-hint", text: "左侧方块里每行一个程序，点一下即可打开" })
+          h("div", { class: "zl-modal-title", text: "设置" }),
+          tabsEl
         ),
-        h("div", { class: "zl-modal-body" }, list, form),
+        body,
         h(
           "div",
           { class: "zl-modal-foot" },
@@ -448,6 +690,8 @@
         )
       )
     );
+    mask.style.setProperty("--zl-fs-panel", `${draft.ui.panelFontSize}px`);
+    mask.style.setProperty("--zl-panel-opacity", String(draft.ui.panelOpacity / 100));
 
     const close = () => mask.remove();
     cancelBtn.addEventListener("click", close);
@@ -475,21 +719,68 @@
       paint();
     };
 
+    const moveButton = (from, to) => {
+      if (to < 0 || to >= draft.buttons.length || from === to) return;
+      const [item] = draft.buttons.splice(from, 1);
+      draft.buttons.splice(to, 0, item);
+      selected = to;
+      paint();
+    };
+
     const paintList = () => {
       list.replaceChildren();
       draft.buttons.forEach((item, i) => {
+        const up = h("button", {
+          class: "zl-mini",
+          type: "button",
+          text: "↑",
+          title: "上移",
+          disabled: i === 0,
+        });
+        up.addEventListener("click", (e) => {
+          e.stopPropagation();
+          moveButton(i, i - 1);
+        });
+        const down = h("button", {
+          class: "zl-mini",
+          type: "button",
+          text: "↓",
+          title: "下移",
+          disabled: i === draft.buttons.length - 1,
+        });
+        down.addEventListener("click", (e) => {
+          e.stopPropagation();
+          moveButton(i, i + 1);
+        });
+
         const row = h(
-          "button",
-          { class: `zl-list-item${i === selected ? " zl-active" : ""}` },
-          h("span", { text: item.icon || "▸" }),
-          h("span", {
-            text: item.label || item.id,
-            style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
-          })
+          "div",
+          {
+            class: `zl-list-item${i === selected ? " zl-active" : ""}`,
+            role: "button",
+            tabindex: "0",
+          },
+          h(
+            "span",
+            { class: "zl-list-name" },
+            h("span", { text: item.icon || "▸" }),
+            h("span", {
+              text: item.label || item.id,
+              style: { overflow: "hidden", textOverflow: "ellipsis", whiteSpace: "nowrap" },
+            })
+          ),
+          h("span", { class: "zl-list-ops" }, up, down)
         );
         row.addEventListener("click", () => {
           selected = i;
           paint();
+        });
+        row.addEventListener("keydown", (e) => {
+          if (e.key === "Enter" || e.key === " ") {
+            e.preventDefault();
+            selected = i;
+            paint();
+          }
         });
         list.append(row);
       });
@@ -543,6 +834,29 @@
             paintSteps();
           });
 
+          const moveStep = (to) => {
+            if (to < 0 || to >= item.steps.length) return;
+            const [s] = item.steps.splice(si, 1);
+            item.steps.splice(to, 0, s);
+            paintSteps();
+          };
+          const upStep = h("button", {
+            class: "zl-mini",
+            type: "button",
+            text: "↑",
+            title: "上移这一步",
+            disabled: si === 0,
+          });
+          upStep.addEventListener("click", () => moveStep(si - 1));
+          const downStep = h("button", {
+            class: "zl-mini",
+            type: "button",
+            text: "↓",
+            title: "下移这一步",
+            disabled: si === item.steps.length - 1,
+          });
+          downStep.addEventListener("click", () => moveStep(si + 1));
+
           const tab = (text, value) => {
             const b = h("button", {
               class: `zl-tab${mode === value ? " zl-active" : ""}`,
@@ -564,9 +878,19 @@
               { class: "zl-step-title" },
               h("span", { text: `第 ${si + 1} 步` }),
               h("div", { class: "zl-tabs" }, tab("选择程序", "program"), tab("写命令", "command")),
-              del
+              h("span", { class: "zl-list-ops" }, upStep, downStep, del)
             )
           );
+
+          const stepName = h("input", {
+            class: "zl-input",
+            value: step.label || "",
+            placeholder: `第 ${si + 1} 步的显示名（展开菜单里用）`,
+          });
+          stepName.addEventListener("input", () => {
+            step.label = stepName.value;
+          });
+          card.append(h("div", { class: "zl-row" }, h("label", { text: "名称" }), stepName));
 
           if (mode === "command") {
             const cmd = h("input", {
@@ -589,6 +913,7 @@
                 const picked = await pick("program");
                 if (picked) {
                   step.run = joinRun(picked, splitRun(step.run).args);
+                  if (!step.label) step.label = baseName(picked);
                   step._mode = "program";
                   paintSteps();
                 }
@@ -606,6 +931,7 @@
                 if (picked) {
                   const args = splitRun(step.run).args;
                   step.run = joinRun(picked, args);
+                  if (!step.label) step.label = baseName(picked);
                   step._mode = "program";
                   paintSteps();
                 }
@@ -666,7 +992,7 @@
       form.append(
         h("div", { class: "zl-row" }, h("label", { text: "名称" }), label, icon),
         h("div", { class: "zl-row" }, h("label", { text: "工作目录" }), cwd, cwdPick),
-        h("div", { class: "zl-hint", text: "每一步选择一个要打开的程序；多个步骤按顺序执行，就是一条启动链。" }),
+        h("div", { class: "zl-hint", text: "点一级按钮 = 按顺序整组启动；点右侧箭头展开后，可单独启动其中某个程序。" }),
         steps,
         h("div", { class: "zl-row", style: { marginTop: "4px" } }, del)
       );
@@ -682,13 +1008,23 @@
       try {
         const cleaned = {
           port: 0,
+          ui: {
+            barFontSize: clampFs(draft.ui && draft.ui.barFontSize, 12),
+            panelFontSize: clampFs(draft.ui && draft.ui.panelFontSize, 12),
+            barOpacity: clampOp(draft.ui && draft.ui.barOpacity, 100),
+            panelOpacity: clampOp(draft.ui && draft.ui.panelOpacity, 100),
+          },
           buttons: draft.buttons.map((b, i) => ({
             id: b.id || `button-${i}`,
             label: String(b.label || "").trim() || `按钮 ${i + 1}`,
             icon: String(b.icon || "▸").slice(0, 4),
             cwd: String(b.cwd || "").trim(),
             steps: (b.steps || [])
-              .map((s) => ({ run: String(s.run || "").trim(), delayMs: Math.max(0, Number(s.delayMs) || 0) }))
+              .map((s) => ({
+                run: String(s.run || "").trim(),
+                delayMs: Math.max(0, Number(s.delayMs) || 0),
+                label: String(s.label || "").trim().slice(0, 40),
+              }))
               .filter((s) => s.run),
           })),
         };
@@ -705,6 +1041,7 @@
 
     if (startNew) newButton();
     else paint();
+    renderBody();
     document.body.append(mask);
   }
 
